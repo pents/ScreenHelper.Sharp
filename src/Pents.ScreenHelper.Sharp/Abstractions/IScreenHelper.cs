@@ -4,7 +4,7 @@ namespace Pents.ScreenHelper.Sharp.Abstractions;
 
 public interface IScreenHelper
 {
-    string GetCurrentActiveWindow();
-    ScreenResolutionDto GetScreenResolution();
+    string? GetCurrentActiveWindowName();
+    ScreenResolutionDto? GetScreenResolution();
     ScreenCoordsDto GetObjectOnScreenCoordinates(object template);
 }

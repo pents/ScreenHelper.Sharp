@@ -2,6 +2,9 @@ using System.Runtime.InteropServices;
 
 namespace Pents.ScreenHelper.Sharp.Extensions;
 
+/// <summary>
+/// Intended for internal use only
+/// </summary>
 public static class CpuExtensions
 {
     public static bool IsArm()

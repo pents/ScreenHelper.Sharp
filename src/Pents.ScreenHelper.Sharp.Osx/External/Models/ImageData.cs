@@ -3,8 +3,8 @@ using System.Runtime.InteropServices;
 namespace Pents.ScreenHelper.Sharp.Osx.External.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal class ScreenWidthHeightExternal : BaseStruct
+internal struct ImageData
 {
-    public uint Width;
-    public uint Height;
+    public byte[] Data;
+    public ulong DataCount;
 }

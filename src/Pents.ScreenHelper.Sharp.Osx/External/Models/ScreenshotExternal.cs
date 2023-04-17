@@ -3,10 +3,10 @@ using System.Runtime.InteropServices;
 namespace Pents.ScreenHelper.Sharp.Osx.External.Models;
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct ScreenshotExternal
+internal class ScreenshotExternal : BaseStruct
 {
     public uint Width;
     public uint Height;
     public nint ImageData;
-    public int DataLength;
+    public ulong DataLength;
 }

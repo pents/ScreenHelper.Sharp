@@ -1,9 +1,11 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Pents.ScreenHelper.Sharp.Abstractions;
 using Pents.ScreenHelper.Sharp.Extensions;
 using Pents.ScreenHelper.Sharp.Models;
+using Pents.ScreenHelper.Sharp.Osx.Extensions;
 using Pents.ScreenHelper.Sharp.Osx.External;
 using Pents.ScreenHelper.Sharp.Osx.External.Models;
 
@@ -22,29 +24,33 @@ public class ScreenHelper : IScreenHelper
     {
         if (CpuExtensions.IsArm())
         {
-            var externalStrPointer = ScreenHelperExternal_Arm.GetCurrentActiveWindowNameExternal();
-            var str = Marshal.PtrToStringUTF8(externalStrPointer);
-            ScreenHelperExternalReleaser_Arm.ReleaseString(externalStrPointer);
-            return str;
+            var ptr = ScreenHelperExternal_Arm.GetCurrentActiveWindowNameExternal();
+            var @struct = Marshal.PtrToStructure<ActiveWindowName>(ptr);
+            @struct.RaiseExceptionIfExistAndRelease(() => ScreenHelperExternalReleaser_Arm.ReleaseActiveWindowName(ptr));
+            return Marshal.PtrToStringUTF8(@struct.Name);
         }
         else
         {
             throw new NotImplementedException("x64 is not supported yet");
         }
     }
-       
-    public string? TryGetCurrentActiveWindowName()
+
+    public bool TryGetCurrentActiveWindowName(out string? name)
     {
         try
         {
-            return GetCurrentActiveWindowName();
+            name = GetCurrentActiveWindowName();
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[{nameof(ScreenHelper)}] Could not get current active window name");
-            return null;
+            _logger.LogError(ex, $"[{nameof(ScreenHelper)}] Error in method {nameof(GetCurrentActiveWindowName)}");
+            name = null;
         }
+
+        return false;
     }
+    
 
     public ScreenResolutionDto GetScreenResolution()
     {
@@ -52,7 +58,7 @@ public class ScreenHelper : IScreenHelper
         {
             var externalStructPointer = ScreenHelperExternal_Arm.GetScreenResolutionExternal();
             var @struct = Marshal.PtrToStructure<ScreenWidthHeightExternal>(externalStructPointer);
-            ScreenHelperExternalReleaser_Arm.ReleaseScreenWidthHeight(externalStructPointer);
+            @struct.RaiseExceptionIfExistAndRelease(() => ScreenHelperExternalReleaser_Arm.ReleaseScreenWidthHeight(externalStructPointer));
             return new ScreenResolutionDto(@struct.Width, @struct.Height);
         }
         else
@@ -60,20 +66,23 @@ public class ScreenHelper : IScreenHelper
             throw new NotImplementedException("x64 is not supported yet");
         }
     }
-    
-    public ScreenResolutionDto? TryGetScreenResolution()
+
+    public bool TryGetScreenResolution(out ScreenResolutionDto? dto)
     {
         try
         {
-            return GetScreenResolution();
+            dto = GetScreenResolution();
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[{nameof(ScreenHelper)}] Could not get screen resolution");
-            return null;
+            _logger.LogError(ex, $"[{nameof(ScreenHelper)}] Error in method {nameof(GetScreenResolution)}");
+            dto = null;
         }
-    }
 
+        return false;
+    }
+    
     public ScreenshotDto GetScreenshot()
     {
         if (CpuExtensions.IsArm())
@@ -81,7 +90,8 @@ public class ScreenHelper : IScreenHelper
             var externalStructPointer = ScreenHelperExternal_Arm.GetScreenshotExternal();
             var @struct = Marshal.PtrToStructure<ScreenshotExternal>(externalStructPointer);
             var data = GetByteArray(@struct.ImageData, @struct.DataLength);
-            ScreenHelperExternalReleaser_Arm.ReleaseScreenshot(externalStructPointer); 
+            @struct.RaiseExceptionIfExistAndRelease(() => ScreenHelperExternalReleaser_Arm.ReleaseScreenshot(externalStructPointer));
+            Debug.Assert(data != null, nameof(data) + " != null");
             return new ScreenshotDto(@struct.Width, @struct.Height, data);
         }
         else
@@ -90,17 +100,21 @@ public class ScreenHelper : IScreenHelper
         }
     }
     
-    public ScreenshotDto? TryGetScreenshot()
+    public bool TryGetScreenshot(out ScreenshotDto? dto)
     {
         try
         {
-            return GetScreenshot();
+            dto = GetScreenshot();
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[{nameof(ScreenHelper)}] Could not get screen resolution");
-            return null;
+            _logger.LogError(ex, $"[{nameof(ScreenHelper)}] Error in method {nameof(GetScreenshot)}");
+
+            dto = null;
         }
+        
+        return false;
     }
 
     public ScreenshotDto GetPartScreenshot(PartScreenshotParams @params)
@@ -114,7 +128,8 @@ public class ScreenHelper : IScreenHelper
                 bottom:@params.Bottom);
             var @struct = Marshal.PtrToStructure<ScreenshotExternal>(externalStructPointer);
             var data = GetByteArray(@struct.ImageData, @struct.DataLength);
-            ScreenHelperExternalReleaser_Arm.ReleaseScreenshot(externalStructPointer); 
+            @struct.RaiseExceptionIfExistAndRelease(() => ScreenHelperExternalReleaser_Arm.ReleaseScreenshot(externalStructPointer));
+            Debug.Assert(data != null, nameof(data) + " != null");
             return new ScreenshotDto(@struct.Width, @struct.Height, data);
         }
         else
@@ -122,29 +137,118 @@ public class ScreenHelper : IScreenHelper
             throw new NotImplementedException("x64 is not supported yet");
         }
     }
-    
-    public ScreenshotDto? TryGetPartScreenshot(PartScreenshotParams @params)
+
+    public bool TryGetPartScreenshot(PartScreenshotParams args, out ScreenshotDto? dto)
     {
         try
         {
-            return GetScreenshot();
+            dto = GetScreenshot();
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[{nameof(ScreenHelper)}] Could not get screen resolution");
-            return null;
+            _logger.LogError(ex, $"[{nameof(ScreenHelper)}] Error in method {nameof(GetPartScreenshot)}");
+            dto = null;
+        }
+
+        return false;
+    }
+
+    public ScreenCoordsDto FindImageInScreen(byte[] template)
+    {
+        if (CpuExtensions.IsArm())
+        {
+            var imageData = new ImageData
+            {
+                Data = template,
+                DataCount = (ulong)template.LongLength, // length is always positive - so unchecked is not necessary
+            };
+            var ptr = ScreenHelperExternal_Arm.FindImageInScreenExternal(ref imageData);
+            var @struct = Marshal.PtrToStructure<ScreenCoordsWithConfidence>(ptr);
+            @struct.RaiseExceptionIfExistAndRelease(() => ScreenHelperExternalReleaser_Arm.ReleaseFoundPoint(ptr));
+            return new ScreenCoordsDto(@struct.X, @struct.Y, @struct.Confidence);
+        }
+        else
+        {
+            throw new NotImplementedException("x64 is not supported yet");
         }
     }
 
-    public ScreenCoordsDto GetObjectOnScreenCoordinates(object template)
+    public bool TryFindImageInScreen(byte[] template, out ScreenCoordsDto? dto)
     {
-        throw new NotImplementedException();
+        try
+        {
+            dto = FindImageInScreen(template);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"[{nameof(ScreenHelper)}] Error in method {nameof(FindImageInScreen)}");
+            dto = null;
+        }
+
+        return false;
     }
 
-    private byte[] GetByteArray(nint arrayPtr, int length)
+    public double GetImageSimilarity(byte[] first, byte[] second)
     {
-        var managedArray = new byte[length];
-        Marshal.Copy(arrayPtr, managedArray, 0, length);
-        return managedArray;
+        var imageData1 = new ImageData
+        {
+            Data = first,
+            DataCount = (ulong)first.LongLength, // length is always positive - so unchecked is not necessary
+        };
+        var imageData2 = new ImageData
+        {
+            Data = second,
+            DataCount = (ulong)second.LongLength, // length is always positive - so unchecked is not necessary
+        };
+        
+        var ptr = ScreenHelperExternal_Arm.SimilarityExternal(ref imageData1, ref imageData2);
+        var @struct = Marshal.PtrToStructure<SimilarityResult>(ptr);
+        @struct.RaiseExceptionIfExistAndRelease(() => ScreenHelperExternalReleaser_Arm.ReleaseSimilarityResult(ptr));
+        return @struct.Value;
+    }
+
+    public bool TryGetImageSimilarity(byte[] first, byte[] second, out double? similarity)
+    {
+        try
+        {
+            similarity = GetImageSimilarity(first, second);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"[{nameof(ScreenHelper)}] Error in method {nameof(GetImageSimilarity)}");
+            similarity = null;
+        }
+
+        return false;
+    }
+
+    // TODO: needs testing
+    private byte[]? GetByteArray(nint arrayPtr, ulong length)
+    {
+        if (length > 0)
+        {
+            var maxChunkSize = int.MaxValue; // Maximum chunk size for 32-bit platforms
+            if (nint.Size == 8)
+            {
+                maxChunkSize = int.MaxValue / 2; // Maximum chunk size for 64-bit platforms
+            }
+
+            var data = new byte[length];
+            long offset = 0;
+
+            while (offset < (long)length)
+            {
+                var chunkSize = (int)Math.Min((ulong)maxChunkSize, length - (ulong)offset);
+                Marshal.Copy((nint)(arrayPtr + offset), data, (int)offset, chunkSize);
+                offset += chunkSize;
+            }
+
+            return data;
+        }
+
+        return null;
     }
 }
